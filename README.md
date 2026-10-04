@@ -19,6 +19,28 @@ Pair-wise GSB 标注任务仓库（第 17 批 / 268）。
 ./mvnw -q verify
 ```
 
+## 实现说明
+
+单决议 Paxos 全部用内存对象模拟，代码位于 `src/main/java/com/example/paxos/`：
+
+| 类 | 职责 |
+|----|------|
+| `ProposalNumber` | 提案编号 `(round, proposerId)`，先比轮次再比提案者标识，构成全局全序 |
+| `Message` | 密封消息族：`Prepare` / `Promise` / `AcceptRequest` / `Accepted` / `Nack` |
+| `Acceptor` | 接受者：持有“已承诺最高编号”和“已接受的 (编号, 值)”两段状态 |
+| `Proposer` | 提案者：两阶段流程、旧值沿用、编号追赶、崩溃恢复与统计 |
+| `Network` | 内存消息队列，支持丢包、延迟、乱序投递 |
+| `Cluster` | 集群装配，串起接受者、提案者与网络 |
+| `PaxosStats` | 统计：提案轮次、prepare/accept 消息数、被拒绝次数、达成的值 |
+
+**承诺规则的作用**：接受者承诺更高编号后，保证拒绝一切更低编号的 prepare/accept。
+一旦某个值在某编号下被多数派接受，任何更高编号的提案者在 prepare 阶段都必然与该多数派
+相交（两个多数派必有交集），通过 Promise 汇报的已接受值发现旧值并沿用，因此已决议的值
+永远不会被并发提案或崩溃恢复后的新提案覆盖。这是 Paxos 安全性的关键。
+
+测试（15 个，位于 `src/test/java/com/example/paxos/PaxosTest.java`）覆盖：两阶段流程与统计、
+承诺规则、旧值沿用（安全性）、并发提案者竞争、崩溃恢复、丢包与乱序/迟到消息。
+
 ## 任务提示词
 
 以下为本题完整的 User Prompt 原文，两次执行必须使用完全相同的文本。
